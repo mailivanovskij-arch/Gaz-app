@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Реестр УАЗ</title>
+    <title>Реестр Автосервиса</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
         :root {
@@ -12,11 +12,27 @@
             --border: #2c2c2e;
             --text: #ffffff;
             --muted: #8e8e93;
+            --accent: #0a84ff;
         }
         * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-        body { background-color: var(--bg); color: var(--text); margin: 0; padding: 16px; }
-        h1 { font-size: 20px; font-weight: 600; margin: 0 0 16px 0; }
+        body { background-color: var(--bg); color: var(--text); margin: 0; padding: 16px 16px 80px 16px; }
         
+        /* Шапка и кнопка добавления */
+        .top-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+        h1 { font-size: 20px; font-weight: 700; margin: 0; }
+        .add-btn {
+            background: var(--accent); color: #fff; border: none; padding: 8px 14px;
+            border-radius: 18px; font-size: 14px; font-weight: 600; cursor: pointer;
+        }
+
+        /* Переключатель брендов */
+        .brand-tabs { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 12px; margin-bottom: 12px; border-bottom: 1px solid var(--border); }
+        .brand-tab {
+            background: var(--card); color: var(--muted); border: 1px solid var(--border);
+            padding: 7px 14px; border-radius: 16px; font-size: 13px; font-weight: 600; white-space: nowrap; cursor: pointer;
+        }
+        .brand-tab.active { background: var(--text); color: var(--bg); border-color: var(--text); }
+
         /* Сетка статистики 2x2 */
         .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
         .stat-box { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 12px 14px; }
@@ -28,82 +44,197 @@
             width: 100%; background: var(--card); border: 1px solid var(--border);
             color: var(--text); padding: 12px 16px; border-radius: 20px; font-size: 15px; margin-bottom: 12px; outline: none;
         }
-        .filter-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+        .filter-bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+        .filter-left { display: flex; align-items: center; gap: 10px; }
         .filter-label { font-size: 14px; color: var(--muted); }
         .filter-select {
             background: var(--card); color: var(--text); border: 1px solid var(--border);
-            padding: 8px 16px; border-radius: 18px; font-size: 14px; outline: none; cursor: pointer;
+            padding: 8px 14px; border-radius: 18px; font-size: 14px; outline: none;
         }
-        .counter-text { font-size: 13px; color: var(--muted); margin-bottom: 12px; }
+        .counter-text { font-size: 13px; color: var(--muted); }
 
-        /* Список машин */
-        .car-card { border-top: 1px solid var(--border); padding: 14px 0; }
+        /* Карточки машин */
+        .car-card { border-top: 1px solid var(--border); padding: 14px 0; cursor: pointer; }
+        .car-card:active { opacity: 0.7; }
         .car-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
         .car-title { font-size: 16px; font-weight: 700; }
         .car-num { font-size: 13px; color: var(--muted); }
         
-        /* Бейджи статусов */
+        /* Цвета статусов */
         .badge-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 13px; color: var(--muted); }
         .badge { padding: 3px 10px; border-radius: 12px; font-size: 12px; font-weight: 500; }
         .st-work { background: rgba(10, 132, 255, 0.2); color: #409cff; }
         .st-parts { background: rgba(255, 159, 10, 0.2); color: #ffb340; }
         .st-client { background: rgba(142, 142, 147, 0.2); color: #d1d1d6; }
+        .st-docs { background: rgba(191, 90, 242, 0.2); color: #da8fff; }
         .st-done { background: rgba(48, 209, 88, 0.2); color: #30d158; }
+        .st-gone { background: rgba(255, 69, 58, 0.15); color: #ff6961; }
 
         .car-issue { font-size: 15px; margin-bottom: 4px; }
         .car-parts { font-size: 13px; color: var(--muted); margin-bottom: 4px; }
         .car-next { font-size: 14px; }
-        .car-next b { font-weight: 600; }
+
+        /* Модальное окно для добавления и редактирования */
+        .modal-overlay {
+            display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.75);
+            align-items: flex-end; justify-content: center; z-index: 100;
+        }
+        .modal-overlay.open { display: flex; }
+        .modal {
+            background: var(--card); width: 100%; max-width: 500px; border-radius: 20px 20px 0 0;
+            padding: 20px; border-top: 1px solid var(--border); max-height: 90vh; overflow-y: auto;
+        }
+        .modal h2 { margin: 0 0 14px 0; font-size: 18px; }
+        .form-group { margin-bottom: 12px; }
+        .form-group label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+        .form-control {
+            width: 100%; background: var(--bg); border: 1px solid var(--border);
+            color: var(--text); padding: 10px 12px; border-radius: 12px; font-size: 15px; outline: none;
+        }
+        .modal-actions { display: flex; gap: 10px; margin-top: 16px; }
+        .btn { flex: 1; padding: 12px; border-radius: 12px; font-size: 15px; font-weight: 600; border: none; cursor: pointer; }
+        .btn-primary { background: var(--accent); color: #fff; }
+        .btn-secondary { background: var(--border); color: var(--text); }
+        .btn-danger { background: rgba(255, 69, 58, 0.2); color: #ff6961; }
     </style>
 </head>
 <body>
 
-    <h1>Реестр УАЗ</h1>
+    <div class="top-bar">
+        <h1 id="pageTitle">Реестр УАЗ</h1>
+        <button class="add-btn" onclick="openModal()">+ Авто</button>
+    </div>
+
+    <div class="brand-tabs" id="brandTabs">
+        <button class="brand-tab active" onclick="selectBrand('УАЗ')">УАЗ</button>
+        <button class="brand-tab" onclick="selectBrand('ГАЗ')">ГАЗ</button>
+        <button class="brand-tab" onclick="selectBrand('КАМАЗ')">КАМАЗ</button>
+        <button class="brand-tab" onclick="selectBrand('УРАЛ')">УРАЛ</button>
+        <button class="brand-tab" onclick="selectBrand('ЛАДА')">ЛАДА</button>
+    </div>
 
     <div class="stats-grid">
-        <div class="stat-box"><div class="stat-title">Всего в реестре</div><div class="stat-num" id="st-total">30</div></div>
-        <div class="stat-box"><div class="stat-title">На территории</div><div class="stat-num" id="st-terr">25</div></div>
-        <div class="stat-box"><div class="stat-title">Ждут запчасти</div><div class="stat-num" id="st-wait">8</div></div>
-        <div class="stat-box"><div class="stat-title">Уехали</div><div class="stat-num" id="st-gone">5</div></div>
+        <div class="stat-box"><div class="stat-title">Всего в реестре</div><div class="stat-num" id="st-total">0</div></div>
+        <div class="stat-box"><div class="stat-title">На территории</div><div class="stat-num" id="st-terr">0</div></div>
+        <div class="stat-box"><div class="stat-title">Ждут запчасти</div><div class="stat-num" id="st-wait">0</div></div>
+        <div class="stat-box"><div class="stat-title">Уехали</div><div class="stat-num" id="st-gone">0</div></div>
     </div>
 
     <input type="text" id="searchInput" class="search-input" placeholder="Поиск: модель, номер, неисправность...">
 
     <div class="filter-bar">
-        <span class="filter-label">Фильтр:</span>
-        <select id="statusFilter" class="filter-select">
-            <option value="Все">✓ Все</option>
-            <option value="В работе">В работе</option>
-            <option value="Ждёт запчасти">Ждёт запчасти</option>
-            <option value="Ждёт клиента">Ждёт клиента</option>
-            <option value="Оформление">Оформление</option>
-            <option value="Документы">Документы</option>
-            <option value="Готово">Готово</option>
-        </select>
+        <div class="filter-left">
+            <span class="filter-label">Фильтр:</span>
+            <select id="statusFilter" class="filter-select">
+                <option value="Все">✓ Все</option>
+                <option value="В работе">В работе</option>
+                <option value="Ждёт запчасти">Ждёт запчасти</option>
+                <option value="Ждёт клиента">Ждёт клиента</option>
+                <option value="Оформление">Оформление</option>
+                <option value="Документы">Документы</option>
+                <option value="Готово">Готово</option>
+                <option value="Уехали">Уехали</option>
+            </select>
+        </div>
+        <div class="counter-text" id="shownCount">Показано: 0</div>
     </div>
 
-    <div class="counter-text" id="shownCount">Показано машин: 3</div>
-
     <div id="carList"></div>
+
+    <!-- Модальное окно добавления / редактирования -->
+    <div class="modal-overlay" id="carModal">
+        <div class="modal">
+            <h2 id="modalTitle">Добавить автомобиль</h2>
+            <input type="hidden" id="editId">
+            
+            <div class="form-group">
+                <label>Модель и Госномер</label>
+                <input type="text" id="carModel" class="form-control" placeholder="Например: УАЗ Патриот (А123ВС)">
+            </div>
+            <div class="form-group">
+                <label>Номер заказ-наряда</label>
+                <input type="text" id="carOrder" class="form-control" placeholder="Например: № 127">
+            </div>
+            <div class="form-group">
+                <label>Статус</label>
+                <select id="carStatus" class="form-control">
+                    <option value="В работе">В работе</option>
+                    <option value="Ждёт запчасти">Ждёт запчасти</option>
+                    <option value="Ждёт клиента">Ждёт клиента</option>
+                    <option value="Оформление">Оформление</option>
+                    <option value="Документы">Документы</option>
+                    <option value="Готово">Готово</option>
+                    <option value="Уехали">Уехали</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Где находится</label>
+                <select id="carLocation" class="form-control">
+                    <option value="Ремзона">Ремзона</option>
+                    <option value="Территория">Территория</option>
+                    <option value="Выдан клиенту">Выдан клиенту</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Неисправность / Работы</label>
+                <input type="text" id="carIssue" class="form-control" placeholder="Например: Замена сцепления">
+            </div>
+            <div class="form-group">
+                <label>Запчасти</label>
+                <input type="text" id="carParts" class="form-control" placeholder="Например: Заказаны · Ожидание 28.10">
+            </div>
+            <div class="form-group">
+                <label>Следующее действие</label>
+                <input type="text" id="carNext" class="form-control" placeholder="Например: Проверить доставку">
+            </div>
+
+            <div class="modal-actions">
+                <button class="btn btn-secondary" onclick="closeModal()">Отмена</button>
+                <button class="btn btn-danger" id="deleteBtn" style="display:none;" onclick="deleteCar()">Удалить</button>
+                <button class="btn btn-primary" onclick="saveCar()">Сохранить</button>
+            </div>
+        </div>
+    </div>
 
     <script>
         const tg = window.Telegram.WebApp;
         tg.expand();
 
-        const cars = [
-            {
-                id: 1, model: "УАЗ Патриот", orderNum: "№ 124", status: "В работе", badgeClass: "st-work",
-                location: "Ремзона", issue: "Замена узла сцепления", parts: "Есть на складе", nextAction: "Завершить ремонт"
-            },
-            {
-                id: 2, model: "УАЗ Профи", orderNum: "№ 125", status: "Ждёт запчасти", badgeClass: "st-parts",
-                location: "Территория", issue: "Подшипник ступицы", parts: "Заказаны · Ожидание: 28.10", nextAction: "Проверить доставку"
-            },
-            {
-                id: 3, model: "УАЗ СГР", orderNum: "№ 126", status: "Ждёт клиента", badgeClass: "st-client",
-                location: "Территория", issue: "Ремонт завершён", parts: "Установлены", nextAction: "Связаться с клиентом"
-            }
+        let currentBrand = 'УАЗ';
+
+        const defaultCars = [
+            { id: 1, brand: "УАЗ", model: "УАЗ Патриот", orderNum: "№ 124", status: "В работе", location: "Ремзона", issue: "Замена узла сцепления", parts: "Есть на складе", nextAction: "Завершить ремонт" },
+            { id: 2, brand: "УАЗ", model: "УАЗ Профи", orderNum: "№ 125", status: "Ждёт запчасти", location: "Территория", issue: "Подшипник ступицы", parts: "Заказаны · Ожидание: 28.10", nextAction: "Проверить доставку" },
+            { id: 3, brand: "УАЗ", model: "УАЗ СГР", orderNum: "№ 126", status: "Ждёт клиента", location: "Территория", issue: "Ремонт завершён", parts: "Установлены", nextAction: "Связаться с клиентом" },
+            { id: 4, brand: "ГАЗ", model: "ГАЗель Next", orderNum: "№ 201", status: "В работе", location: "Ремзона", issue: "Замена прокладки ГБЦ", parts: "В наличии", nextAction: "Сборка ГБЦ" }
         ];
+
+        let cars = JSON.parse(localStorage.getItem('service_cars_v1')) || defaultCars;
+
+        function saveToStorage() {
+            localStorage.setItem('service_cars_v1', JSON.stringify(cars));
+        }
+
+        function getBadgeClass(status) {
+            switch(status) {
+                case 'В работе': return 'st-work';
+                case 'Ждёт запчасти': return 'st-parts';
+                case 'Готово': return 'st-done';
+                case 'Уехали': return 'st-gone';
+                case 'Документы':
+                case 'Оформление': return 'st-docs';
+                default: return 'st-client';
+            }
+        }
+
+        function selectBrand(brand) {
+            currentBrand = brand;
+            document.getElementById('pageTitle').innerText = `Реестр ${brand}`;
+            document.querySelectorAll('.brand-tab').forEach(btn => {
+                btn.classList.toggle('active', btn.innerText === brand);
+            });
+            renderCars();
+        }
 
         function renderCars() {
             const search = document.getElementById('searchInput').value.toLowerCase();
@@ -111,7 +242,20 @@
             const list = document.getElementById('carList');
             list.innerHTML = '';
 
-            const filtered = cars.filter(c => {
+            const brandCars = cars.filter(c => c.brand === currentBrand);
+
+            // Подсчет статистики
+            const total = brandCars.length;
+            const gone = brandCars.filter(c => c.status === 'Уехали').length;
+            const onTerr = total - gone;
+            const waitParts = brandCars.filter(c => c.status === 'Ждёт запчасти').length;
+
+            document.getElementById('st-total').innerText = total;
+            document.getElementById('st-terr').innerText = onTerr;
+            document.getElementById('st-wait').innerText = waitParts;
+            document.getElementById('st-gone').innerText = gone;
+
+            const filtered = brandCars.filter(c => {
                 const matchStatus = (filter === 'Все') || (c.status === filter);
                 const matchSearch = c.model.toLowerCase().includes(search) || 
                                     c.issue.toLowerCase().includes(search) || 
@@ -119,17 +263,17 @@
                 return matchStatus && matchSearch;
             });
 
-            document.getElementById('shownCount').innerText = `Показано машин: ${filtered.length}`;
+            document.getElementById('shownCount').innerText = `Показано: ${filtered.length}`;
 
-            filtered.forEach(c => {
+            filtered.forEach((c, index) => {
                 list.innerHTML += `
-                    <div class="car-card">
+                    <div class="car-card" onclick="openModal(${c.id})">
                         <div class="car-header">
-                            <span class="car-title">#${c.id} · ${c.model}</span>
-                            <span class="car-num">${c.orderNum}</span>
+                            <span class="car-title">#${index + 1} · ${c.model}</span>
+                            <span class="car-num">${c.orderNum} ✎</span>
                         </div>
                         <div class="badge-row">
-                            <span class="badge ${c.badgeClass}">${c.status}</span>
+                            <span class="badge ${getBadgeClass(c.status)}">${c.status}</span>
                             <span>${c.location}</span>
                         </div>
                         <div class="car-issue">${c.issue}</div>
@@ -138,6 +282,74 @@
                     </div>
                 `;
             });
+        }
+
+        function openModal(id = null) {
+            const modal = document.getElementById('carModal');
+            const delBtn = document.getElementById('deleteBtn');
+            if (id) {
+                const car = cars.find(c => c.id === id);
+                document.getElementById('modalTitle').innerText = 'Редактировать авто';
+                document.getElementById('editId').value = car.id;
+                document.getElementById('carModel').value = car.model;
+                document.getElementById('carOrder').value = car.orderNum;
+                document.getElementById('carStatus').value = car.status;
+                document.getElementById('carLocation').value = car.location;
+                document.getElementById('carIssue').value = car.issue;
+                document.getElementById('carParts').value = car.parts;
+                document.getElementById('carNext').value = car.nextAction;
+                delBtn.style.display = 'block';
+            } else {
+                document.getElementById('modalTitle').innerText = `Добавить в ${currentBrand}`;
+                document.getElementById('editId').value = '';
+                document.getElementById('carModel').value = currentBrand + ' ';
+                document.getElementById('carOrder').value = '№ ';
+                document.getElementById('carStatus').value = 'В работе';
+                document.getElementById('carLocation').value = 'Ремзона';
+                document.getElementById('carIssue').value = '';
+                document.getElementById('carParts').value = '';
+                document.getElementById('carNext').value = '';
+                delBtn.style.display = 'none';
+            }
+            modal.classList.add('open');
+        }
+
+        function closeModal() {
+            document.getElementById('carModal').classList.remove('open');
+        }
+
+        function saveCar() {
+            const editId = document.getElementById('editId').value;
+            const carData = {
+                id: editId ? Number(editId) : Date.now(),
+                brand: currentBrand,
+                model: document.getElementById('carModel').value.trim() || currentBrand,
+                orderNum: document.getElementById('carOrder').value.trim() || 'Б/Н',
+                status: document.getElementById('carStatus').value,
+                location: document.getElementById('carLocation').value,
+                issue: document.getElementById('carIssue').value.trim() || 'Диагностика',
+                parts: document.getElementById('carParts').value.trim() || 'Не указано',
+                nextAction: document.getElementById('carNext').value.trim() || 'Осмотр мастера'
+            };
+
+            if (editId) {
+                const idx = cars.findIndex(c => c.id === Number(editId));
+                if (idx > -1) cars[idx] = carData;
+            } else {
+                cars.unshift(carData);
+            }
+
+            saveToStorage();
+            closeModal();
+            renderCars();
+        }
+
+        function deleteCar() {
+            const editId = Number(document.getElementById('editId').value);
+            cars = cars.filter(c => c.id !== editId);
+            saveToStorage();
+            closeModal();
+            renderCars();
         }
 
         document.getElementById('searchInput').addEventListener('input', renderCars);
