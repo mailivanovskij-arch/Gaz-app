@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Реестр Автосервиса</title>
+    <title>Реестр Автосервиса Online</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
         :root {
@@ -17,9 +17,11 @@
         * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
         body { background-color: var(--bg); color: var(--text); margin: 0; padding: 16px 16px 80px 16px; }
         
-        /* Шапка и кнопка добавления */
+        /* Шапка */
         .top-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+        .title-wrap { display: flex; align-items: center; gap: 8px; }
         h1 { font-size: 20px; font-weight: 700; margin: 0; }
+        .sync-dot { font-size: 12px; color: #30d158; font-weight: 500; }
         .add-btn {
             background: var(--accent); color: #fff; border: none; padding: 8px 14px;
             border-radius: 18px; font-size: 14px; font-weight: 600; cursor: pointer;
@@ -72,9 +74,10 @@
 
         .car-issue { font-size: 15px; margin-bottom: 4px; }
         .car-parts { font-size: 13px; color: var(--muted); margin-bottom: 4px; }
-        .car-next { font-size: 14px; }
+        .car-next { font-size: 14px; margin-bottom: 4px; }
+        .car-author { font-size: 11px; color: var(--muted); }
 
-        /* Модальное окно для добавления и редактирования */
+        /* Модальное окно */
         .modal-overlay {
             display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.75);
             align-items: flex-end; justify-content: center; z-index: 100;
@@ -101,11 +104,14 @@
 <body>
 
     <div class="top-bar">
-        <h1 id="pageTitle">Реестр УАЗ</h1>
+        <div class="title-wrap">
+            <h1 id="pageTitle">Реестр УАЗ</h1>
+            <span class="sync-dot" id="syncStatus">⏳ Связь...</span>
+        </div>
         <button class="add-btn" onclick="openModal()">+ Авто</button>
     </div>
 
-    <div class="brand-tabs" id="brandTabs">
+    <div class="brand-tabs">
         <button class="brand-tab active" onclick="selectBrand('УАЗ')">УАЗ</button>
         <button class="brand-tab" onclick="selectBrand('ГАЗ')">ГАЗ</button>
         <button class="brand-tab" onclick="selectBrand('КАМАЗ')">КАМАЗ</button>
@@ -141,7 +147,7 @@
 
     <div id="carList"></div>
 
-    <!-- Модальное окно добавления / редактирования -->
+    <!-- Модальное окно -->
     <div class="modal-overlay" id="carModal">
         <div class="modal">
             <h2 id="modalTitle">Добавить автомобиль</h2>
@@ -200,19 +206,49 @@
         const tg = window.Telegram.WebApp;
         tg.expand();
 
+        // ВАША ПОДКЛЮЧЕННАЯ БАЗА FIREBASE:
+        const FIREBASE_URL = "https://service-bot-3fd2d-default-rtdb.firebaseio.com";
+
+        const currentUser = tg.initDataUnsafe?.user?.first_name || "Мастер";
+
         let currentBrand = 'УАЗ';
+        let cars = [];
 
-        const defaultCars = [
-            { id: 1, brand: "УАЗ", model: "УАЗ Патриот", orderNum: "№ 124", status: "В работе", location: "Ремзона", issue: "Замена узла сцепления", parts: "Есть на складе", nextAction: "Завершить ремонт" },
-            { id: 2, brand: "УАЗ", model: "УАЗ Профи", orderNum: "№ 125", status: "Ждёт запчасти", location: "Территория", issue: "Подшипник ступицы", parts: "Заказаны · Ожидание: 28.10", nextAction: "Проверить доставку" },
-            { id: 3, brand: "УАЗ", model: "УАЗ СГР", orderNum: "№ 126", status: "Ждёт клиента", location: "Территория", issue: "Ремонт завершён", parts: "Установлены", nextAction: "Связаться с клиентом" },
-            { id: 4, brand: "ГАЗ", model: "ГАЗель Next", orderNum: "№ 201", status: "В работе", location: "Ремзона", issue: "Замена прокладки ГБЦ", parts: "В наличии", nextAction: "Сборка ГБЦ" }
-        ];
+        const starterCars = {
+            "101": { id: 101, brand: "УАЗ", model: "УАЗ Патриот", orderNum: "№ 124", status: "В работе", location: "Ремзона", issue: "Замена узла сцепления", parts: "Есть на складе", nextAction: "Завершить ремонт", updatedBy: "Система" },
+            "102": { id: 102, brand: "УАЗ", model: "УАЗ Профи", orderNum: "№ 125", status: "Ждёт запчасти", location: "Территория", issue: "Подшипник ступицы", parts: "Заказаны · Ожидание: 28.10", nextAction: "Проверить доставку", updatedBy: "Система" },
+            "103": { id: 103, brand: "УАЗ", model: "УАЗ СГР", orderNum: "№ 126", status: "Ждёт клиента", location: "Территория", issue: "Ремонт завершён", parts: "Установлены", nextAction: "Связаться с клиентом", updatedBy: "Система" },
+            "201": { id: 201, brand: "ГАЗ", model: "ГАЗель Next", orderNum: "№ 201", status: "В работе", location: "Ремзона", issue: "Замена прокладки ГБЦ", parts: "В наличии", nextAction: "Сборка ГБЦ", updatedBy: "Система" }
+        };
 
-        let cars = JSON.parse(localStorage.getItem('service_cars_v1')) || defaultCars;
+        function initRealtimeSync() {
+            const stream = new EventSource(`${FIREBASE_URL}/cars.json`);
+            stream.addEventListener('put', () => loadAllCars());
+            stream.addEventListener('patch', () => loadAllCars());
+            loadAllCars();
+        }
 
-        function saveToStorage() {
-            localStorage.setItem('service_cars_v1', JSON.stringify(cars));
+        async function loadAllCars() {
+            try {
+                const res = await fetch(`${FIREBASE_URL}/cars.json`);
+                const data = await res.json();
+                
+                if (!data) {
+                    await fetch(`${FIREBASE_URL}/cars.json`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(starterCars)
+                    });
+                    cars = Object.values(starterCars);
+                } else {
+                    cars = Object.values(data).filter(Boolean).sort((a, b) => b.id - a.id);
+                }
+
+                document.getElementById('syncStatus').innerText = "🟢 Онлайн";
+                renderCars();
+            } catch (err) {
+                document.getElementById('syncStatus').innerText = "🔴 Ошибка сети";
+            }
         }
 
         function getBadgeClass(status) {
@@ -244,7 +280,6 @@
 
             const brandCars = cars.filter(c => c.brand === currentBrand);
 
-            // Подсчет статистики
             const total = brandCars.length;
             const gone = brandCars.filter(c => c.status === 'Уехали').length;
             const onTerr = total - gone;
@@ -257,9 +292,9 @@
 
             const filtered = brandCars.filter(c => {
                 const matchStatus = (filter === 'Все') || (c.status === filter);
-                const matchSearch = c.model.toLowerCase().includes(search) || 
-                                    c.issue.toLowerCase().includes(search) || 
-                                    c.orderNum.toLowerCase().includes(search);
+                const matchSearch = (c.model || '').toLowerCase().includes(search) || 
+                                    (c.issue || '').toLowerCase().includes(search) || 
+                                    (c.orderNum || '').toLowerCase().includes(search);
                 return matchStatus && matchSearch;
             });
 
@@ -279,6 +314,7 @@
                         <div class="car-issue">${c.issue}</div>
                         <div class="car-parts">Запчасти: ${c.parts}</div>
                         <div class="car-next">Следующее действие: <b>${c.nextAction}</b></div>
+                        ${c.updatedBy ? `<div class="car-author">Обновил: ${c.updatedBy}</div>` : ''}
                     </div>
                 `;
             });
@@ -318,10 +354,13 @@
             document.getElementById('carModal').classList.remove('open');
         }
 
-        function saveCar() {
+        async function saveCar() {
             const editId = document.getElementById('editId').value;
+            const id = editId ? Number(editId) : Date.now();
+            const nowTime = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+
             const carData = {
-                id: editId ? Number(editId) : Date.now(),
+                id: id,
                 brand: currentBrand,
                 model: document.getElementById('carModel').value.trim() || currentBrand,
                 orderNum: document.getElementById('carOrder').value.trim() || 'Б/Н',
@@ -329,32 +368,29 @@
                 location: document.getElementById('carLocation').value,
                 issue: document.getElementById('carIssue').value.trim() || 'Диагностика',
                 parts: document.getElementById('carParts').value.trim() || 'Не указано',
-                nextAction: document.getElementById('carNext').value.trim() || 'Осмотр мастера'
+                nextAction: document.getElementById('carNext').value.trim() || 'Осмотр мастера',
+                updatedBy: `${currentUser} (${nowTime})`
             };
 
-            if (editId) {
-                const idx = cars.findIndex(c => c.id === Number(editId));
-                if (idx > -1) cars[idx] = carData;
-            } else {
-                cars.unshift(carData);
-            }
-
-            saveToStorage();
             closeModal();
-            renderCars();
+            await fetch(`${FIREBASE_URL}/cars/${id}.json`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(carData)
+            });
+            loadAllCars();
         }
 
-        function deleteCar() {
-            const editId = Number(document.getElementById('editId').value);
-            cars = cars.filter(c => c.id !== editId);
-            saveToStorage();
+        async function deleteCar() {
+            const id = document.getElementById('editId').value;
             closeModal();
-            renderCars();
+            await fetch(`${FIREBASE_URL}/cars/${id}.json`, { method: 'DELETE' });
+            loadAllCars();
         }
 
         document.getElementById('searchInput').addEventListener('input', renderCars);
         document.getElementById('statusFilter').addEventListener('change', renderCars);
-        renderCars();
+        initRealtimeSync();
     </script>
 </body>
 </html>
