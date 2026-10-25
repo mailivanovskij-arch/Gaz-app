@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Реестр УАЗ</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        :root {
+            --bg: #0f0f10;
+            --card: #1c1c1e;
+            --border: #2c2c2e;
+            --text: #ffffff;
+            --muted: #8e8e93;
+        }
+        * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        body { background-color: var(--bg); color: var(--text); margin: 0; padding: 16px; }
+        h1 { font-size: 20px; font-weight: 600; margin: 0 0 16px 0; }
+        
+        /* Сетка статистики 2x2 */
+        .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+        .stat-box { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 12px 14px; }
+        .stat-title { font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+        .stat-num { font-size: 28px; font-weight: 700; }
+
+        /* Поиск и Фильтр */
+        .search-input {
+            width: 100%; background: var(--card); border: 1px solid var(--border);
+            color: var(--text); padding: 12px 16px; border-radius: 20px; font-size: 15px; margin-bottom: 12px; outline: none;
+        }
+        .filter-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+        .filter-label { font-size: 14px; color: var(--muted); }
+        .filter-select {
+            background: var(--card); color: var(--text); border: 1px solid var(--border);
+            padding: 8px 16px; border-radius: 18px; font-size: 14px; outline: none; cursor: pointer;
+        }
+        .counter-text { font-size: 13px; color: var(--muted); margin-bottom: 12px; }
+
+        /* Список машин */
+        .car-card { border-top: 1px solid var(--border); padding: 14px 0; }
+        .car-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+        .car-title { font-size: 16px; font-weight: 700; }
+        .car-num { font-size: 13px; color: var(--muted); }
+        
+        /* Бейджи статусов */
+        .badge-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 13px; color: var(--muted); }
+        .badge { padding: 3px 10px; border-radius: 12px; font-size: 12px; font-weight: 500; }
+        .st-work { background: rgba(10, 132, 255, 0.2); color: #409cff; }
+        .st-parts { background: rgba(255, 159, 10, 0.2); color: #ffb340; }
+        .st-client { background: rgba(142, 142, 147, 0.2); color: #d1d1d6; }
+        .st-done { background: rgba(48, 209, 88, 0.2); color: #30d158; }
+
+        .car-issue { font-size: 15px; margin-bottom: 4px; }
+        .car-parts { font-size: 13px; color: var(--muted); margin-bottom: 4px; }
+        .car-next { font-size: 14px; }
+        .car-next b { font-weight: 600; }
+    </style>
+</head>
+<body>
+
+    <h1>Реестр УАЗ</h1>
+
+    <div class="stats-grid">
+        <div class="stat-box"><div class="stat-title">Всего в реестре</div><div class="stat-num" id="st-total">30</div></div>
+        <div class="stat-box"><div class="stat-title">На территории</div><div class="stat-num" id="st-terr">25</div></div>
+        <div class="stat-box"><div class="stat-title">Ждут запчасти</div><div class="stat-num" id="st-wait">8</div></div>
+        <div class="stat-box"><div class="stat-title">Уехали</div><div class="stat-num" id="st-gone">5</div></div>
+    </div>
+
+    <input type="text" id="searchInput" class="search-input" placeholder="Поиск: модель, номер, неисправность...">
+
+    <div class="filter-bar">
+        <span class="filter-label">Фильтр:</span>
+        <select id="statusFilter" class="filter-select">
+            <option value="Все">✓ Все</option>
+            <option value="В работе">В работе</option>
+            <option value="Ждёт запчасти">Ждёт запчасти</option>
+            <option value="Ждёт клиента">Ждёт клиента</option>
+            <option value="Оформление">Оформление</option>
+            <option value="Документы">Документы</option>
+            <option value="Готово">Готово</option>
+        </select>
+    </div>
+
+    <div class="counter-text" id="shownCount">Показано машин: 3</div>
+
+    <div id="carList"></div>
+
+    <script>
+        const tg = window.Telegram.WebApp;
+        tg.expand();
+
+        const cars = [
+            {
+                id: 1, model: "УАЗ Патриот", orderNum: "№ 124", status: "В работе", badgeClass: "st-work",
+                location: "Ремзона", issue: "Замена узла сцепления", parts: "Есть на складе", nextAction: "Завершить ремонт"
+            },
+            {
+                id: 2, model: "УАЗ Профи", orderNum: "№ 125", status: "Ждёт запчасти", badgeClass: "st-parts",
+                location: "Территория", issue: "Подшипник ступицы", parts: "Заказаны · Ожидание: 28.10", nextAction: "Проверить доставку"
+            },
+            {
+                id: 3, model: "УАЗ СГР", orderNum: "№ 126", status: "Ждёт клиента", badgeClass: "st-client",
+                location: "Территория", issue: "Ремонт завершён", parts: "Установлены", nextAction: "Связаться с клиентом"
+            }
+        ];
+
+        function renderCars() {
+            const search = document.getElementById('searchInput').value.toLowerCase();
+            const filter = document.getElementById('statusFilter').value;
+            const list = document.getElementById('carList');
+            list.innerHTML = '';
+
+            const filtered = cars.filter(c => {
+                const matchStatus = (filter === 'Все') || (c.status === filter);
+                const matchSearch = c.model.toLowerCase().includes(search) || 
+                                    c.issue.toLowerCase().includes(search) || 
+                                    c.orderNum.toLowerCase().includes(search);
+                return matchStatus && matchSearch;
+            });
+
+            document.getElementById('shownCount').innerText = `Показано машин: ${filtered.length}`;
+
+            filtered.forEach(c => {
+                list.innerHTML += `
+                    <div class="car-card">
+                        <div class="car-header">
+                            <span class="car-title">#${c.id} · ${c.model}</span>
+                            <span class="car-num">${c.orderNum}</span>
+                        </div>
+                        <div class="badge-row">
+                            <span class="badge ${c.badgeClass}">${c.status}</span>
+                            <span>${c.location}</span>
+                        </div>
+                        <div class="car-issue">${c.issue}</div>
+                        <div class="car-parts">Запчасти: ${c.parts}</div>
+                        <div class="car-next">Следующее действие: <b>${c.nextAction}</b></div>
+                    </div>
+                `;
+            });
+        }
+
+        document.getElementById('searchInput').addEventListener('input', renderCars);
+        document.getElementById('statusFilter').addEventListener('change', renderCars);
+        renderCars();
+    </script>
+</body>
+</html>
