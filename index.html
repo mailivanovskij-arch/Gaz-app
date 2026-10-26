@@ -35,10 +35,16 @@
         }
         .brand-tab.active { background: var(--text); color: var(--bg); border-color: var(--text); }
 
-        /* Сетка статистики 2x2 */
+        /* Сетка статистики 2x2 (Кликабельная) */
         .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
-        .stat-box { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 12px 14px; }
+        .stat-box { 
+            background: var(--card); border: 1px solid var(--border); border-radius: 14px; 
+            padding: 12px 14px; cursor: pointer; transition: all 0.15s ease; user-select: none;
+        }
+        .stat-box:active { transform: scale(0.97); opacity: 0.85; }
+        .stat-box.active { border-color: var(--accent); background: rgba(10, 132, 255, 0.12); }
         .stat-title { font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+        .stat-box.active .stat-title { color: #64b5f6; }
         .stat-num { font-size: 28px; font-weight: 700; }
 
         /* Поиск и Фильтр */
@@ -120,10 +126,22 @@
     </div>
 
     <div class="stats-grid">
-        <div class="stat-box"><div class="stat-title">Всего в реестре</div><div class="stat-num" id="st-total">0</div></div>
-        <div class="stat-box"><div class="stat-title">На территории</div><div class="stat-num" id="st-terr">0</div></div>
-        <div class="stat-box"><div class="stat-title">Ждут запчасти</div><div class="stat-num" id="st-wait">0</div></div>
-        <div class="stat-box"><div class="stat-title">Уехали</div><div class="stat-num" id="st-gone">0</div></div>
+        <div class="stat-box active" id="box-all" onclick="filterByStat('Все')">
+            <div class="stat-title">Всего в реестре</div>
+            <div class="stat-num" id="st-total">0</div>
+        </div>
+        <div class="stat-box" id="box-terr" onclick="filterByStat('На территории')">
+            <div class="stat-title">На территории</div>
+            <div class="stat-num" id="st-terr">0</div>
+        </div>
+        <div class="stat-box" id="box-wait" onclick="filterByStat('Ждёт запчасти')">
+            <div class="stat-title">Ждут запчасти</div>
+            <div class="stat-num" id="st-wait">0</div>
+        </div>
+        <div class="stat-box" id="box-gone" onclick="filterByStat('Уехали')">
+            <div class="stat-title">Уехали</div>
+            <div class="stat-num" id="st-gone">0</div>
+        </div>
     </div>
 
     <input type="text" id="searchInput" class="search-input" placeholder="Поиск: модель, номер, неисправность...">
@@ -133,6 +151,7 @@
             <span class="filter-label">Фильтр:</span>
             <select id="statusFilter" class="filter-select">
                 <option value="Все">✓ Все</option>
+                <option value="На территории">📍 На территории</option>
                 <option value="В работе">В работе</option>
                 <option value="Ждёт запчасти">Ждёт запчасти</option>
                 <option value="Ждёт клиента">Ждёт клиента</option>
@@ -272,11 +291,33 @@
             renderCars();
         }
 
+        // Переключение фильтра по клику на верхние карточки со счётчиками
+        function filterByStat(filterValue) {
+            const select = document.getElementById('statusFilter');
+            // Если повторно нажали на уже выбранную карточку — сбрасываем обратно на "Все"
+            if (select.value === filterValue && filterValue !== 'Все') {
+                select.value = 'Все';
+            } else {
+                select.value = filterValue;
+            }
+            renderCars();
+        }
+
+        function updateActiveStatBox(filter) {
+            document.querySelectorAll('.stat-box').forEach(box => box.classList.remove('active'));
+            if (filter === 'Все') document.getElementById('box-all')?.classList.add('active');
+            else if (filter === 'На территории') document.getElementById('box-terr')?.classList.add('active');
+            else if (filter === 'Ждёт запчасти') document.getElementById('box-wait')?.classList.add('active');
+            else if (filter === 'Уехали') document.getElementById('box-gone')?.classList.add('active');
+        }
+
         function renderCars() {
             const search = document.getElementById('searchInput').value.toLowerCase();
             const filter = document.getElementById('statusFilter').value;
             const list = document.getElementById('carList');
             list.innerHTML = '';
+
+            updateActiveStatBox(filter);
 
             const brandCars = cars.filter(c => c.brand === currentBrand);
 
@@ -291,7 +332,15 @@
             document.getElementById('st-gone').innerText = gone;
 
             const filtered = brandCars.filter(c => {
-                const matchStatus = (filter === 'Все') || (c.status === filter);
+                let matchStatus = false;
+                if (filter === 'Все') {
+                    matchStatus = true;
+                } else if (filter === 'На территории') {
+                    matchStatus = (c.status !== 'Уехали');
+                } else {
+                    matchStatus = (c.status === filter);
+                }
+
                 const matchSearch = (c.model || '').toLowerCase().includes(search) || 
                                     (c.issue || '').toLowerCase().includes(search) || 
                                     (c.orderNum || '').toLowerCase().includes(search);
@@ -299,6 +348,11 @@
             });
 
             document.getElementById('shownCount').innerText = `Показано: ${filtered.length}`;
+
+            if (filtered.length === 0) {
+                list.innerHTML = `<div style="text-align:center; color: var(--muted); padding: 30px 0; font-size: 14px;">В этой категории пока нет автомобилей</div>`;
+                return;
+            }
 
             filtered.forEach((c, index) => {
                 list.innerHTML += `
